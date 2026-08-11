@@ -132,8 +132,11 @@ packages:
       ServerQueueMap:
       RequestQueue:
 
+  # ClientOpt and ServerOpt are deliberately absent: they are func types over
+  # the unexported *client / *server, so a mock in package mocks cannot name
+  # their parameter and will not compile.
   github.com/lorenzodonini/ocpp-go/ws:
     interfaces:
-      WsClient:
-      WsServer:
+      Client:
+      Server:
       Channel:
