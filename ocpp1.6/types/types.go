@@ -264,7 +264,7 @@ func isValidMeasurand(fl validator.FieldLevel) bool {
 	case MeasurandSoC, MeasurandCurrentExport, MeasurandCurrentImport, MeasurandCurrentOffered, MeasurandEnergyActiveExportInterval, MeasurandEnergyActiveExportRegister, MeasurandEnergyReactiveExportInterval, MeasurandEnergyReactiveExportRegister, MeasurandEnergyReactiveImportRegister, MeasurandEnergyReactiveImportInterval, MeasurandEnergyActiveImportInterval, MeasurandEnergyActiveImportRegister, MeasurandFrequency, MeasurandPowerActiveExport, MeasurandPowerActiveImport, MeasurandPowerReactiveImport, MeasurandPowerReactiveExport, MeasurandPowerOffered, MeasurandPowerFactor, MeasurandVoltage, MeasurandTemperature, MeasurandRPM:
 		return true
 	default:
-		return false
+		return isVendorMeasurand(measurand)
 	}
 }
 
@@ -294,7 +294,7 @@ func isValidUnitOfMeasure(fl validator.FieldLevel) bool {
 	case UnitOfMeasureA, UnitOfMeasureWh, UnitOfMeasureKWh, UnitOfMeasureVarh, UnitOfMeasureKvarh, UnitOfMeasureW, UnitOfMeasureKW, UnitOfMeasureVA, UnitOfMeasureKVA, UnitOfMeasureVar, UnitOfMeasureKvar, UnitOfMeasureV, UnitOfMeasureCelsius, UnitOfMeasureCelcius, UnitOfMeasureFahrenheit, UnitOfMeasureK, UnitOfMeasurePercent:
 		return true
 	default:
-		return false
+		return isVendorUnitOfMeasure(unitOfMeasure)
 	}
 }
 
