@@ -229,7 +229,6 @@ type webSocket struct {
 	mutex              sync.RWMutex
 	id                 string
 	outQueue           chan message
-	pingC              chan []byte
 	closeC             chan websocket.CloseError // used to gracefully close a websocket connection.
 	forceCloseC        chan error                // used by the readPump to notify a forcefully closed connection to the writePump.
 	tlsConnectionState *tls.ConnectionState
@@ -250,7 +249,6 @@ func newWebSocket(id string, conn *websocket.Conn, tlsState *tls.ConnectionState
 		mutex:              sync.RWMutex{},
 		tlsConnectionState: tlsState,
 		outQueue:           make(chan message, 2),
-		pingC:              make(chan []byte, 1),
 		closeC:             make(chan websocket.CloseError, 1),
 		forceCloseC:        make(chan error, 1),
 		onClosed:           onClosed,
@@ -355,11 +353,24 @@ func (w *webSocket) initPingPong() {
 }
 
 func (w *webSocket) onPing(appData string) error {
+	w.mutex.RLock()
 	conn := w.connection
+	writeWait := w.cfg.WriteWait
+	w.mutex.RUnlock()
+	if conn == nil {
+		return fmt.Errorf("cannot reply to ping on closed connection %s", w.id)
+	}
 	w.log.Debugf("ping received from %s: %s", w.id, appData)
-	// Schedule pong message via dedicated channel
-	w.pingC <- []byte(appData)
-	w.log.Debugf("pong scheduled for %s", w.id)
+	// Reply with a pong right away. WriteControl may be called concurrently with
+	// the writePump, so the reply doesn't have to wait for queued messages.
+	if err := conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(writeWait)); err != nil {
+		err = fmt.Errorf("failed to send pong message %s: %w", w.id, err)
+		w.onError(w, err)
+		// Returning an error interrupts the readPump, which in turn
+		// notifies the writePump to forcefully close the connection.
+		return err
+	}
+	w.log.Debugf("pong sent for %s: %s", w.id, appData)
 	// Reset read interval after receiving a ping
 	return conn.SetReadDeadline(w.getReadTimeout())
 }
@@ -379,7 +390,6 @@ func (w *webSocket) cleanup(err error) {
 	}
 	w.connection = nil
 	close(w.outQueue)
-	close(w.pingC)
 	close(w.closeC)
 	close(w.forceCloseC)
 	w.mutex.Unlock()
@@ -459,19 +469,8 @@ func (w *webSocket) writePump() {
 				return
 			}
 			log.Debugf("ping sent for %s", w.id)
-		case ping := <-w.pingC:
-			// Reply with pong message
-			_ = conn.SetWriteDeadline(time.Now().Add(w.cfg.WriteWait))
-			err := conn.WriteMessage(websocket.PongMessage, ping)
-			if err != nil {
-				w.onError(w, fmt.Errorf("failed to send pong message %s: %w", w.id, err))
-				// Invoking cleanup, as socket was forcefully closed
-				closure(err)
-				return
-			}
-			log.Debugf("pong sent for %s: %s", w.id, string(ping))
 		case msg, ok := <-w.outQueue:
-			// New data needs to be written out (also invoked for pong messages)
+			// New data needs to be written out
 			if !ok {
 				// Unexpected closed queue, should never happen.
 				// Don't invoke any cleanup but just exit routine.
